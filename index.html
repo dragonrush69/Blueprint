@@ -1,4 +1,4 @@
-<!-- Blueprint Stack Calculator v4 — 2026-09-27 -->
+<!-- Blueprint Stack Calculator v5 — 2026-09-27 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -23,20 +23,38 @@
 <body>
 <div id="root"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js?v=3"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js?v=3"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js?v=3"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js?v=5"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js?v=5"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js?v=5"></script>
 
 <script type="text/babel">
 const { useState, useEffect } = React;
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const STACK_URL = "https://script.google.com/macros/s/AKfycbzuFNRBcBWmGjqDBP_WBoMuOHPZN3qkkKH67_DhCtYR7zSlj-fmhHSJkAoMH6hG6X39/exec";
-
 const stackEnabled = () => STACK_URL && !STACK_URL.startsWith("YOUR_");
 
+// ─── HARDCODED ROSTER ─────────────────────────────────────────────────────────
+const ROSTER = {
+  G9: ["Punisher II", "Purifier II", "Smiter II", "Corax II"],
+  G8: ["Punisher I",  "Purifier I",  "Smiter I",  "Corax I"],
+  S9: ["Duelist II",  "Legitimist II",  "Whitemane II",  "Royal Lion II"],
+  S8: ["Duelist I",   "Legitimist I",   "Whitemain I",   "Royal Lion I"],
+  E9: ["Cannon II"],
+  E8: ["Cannon I"],
+  M9: ["Trickster II", "Fire Phoenix II", "Kraken II"],
+  M8: ["Trickster I",  "Devastator I",    "Fire Phoenix I", "Kraken I", "Devastator II"],
+  M7: ["Ancient Terror", "Black Dragon", "Destructive Colossus", "Wind Lord"],
+  MERCS: [
+    "Grim Stalker Leader", "Wasp-Man Leader", "Highlander", "Slavic warrior",
+    "Pounder", "Scarface", "Chitinous Defnder Leader", "Combat Anreater Leader",
+    "Quicksand", "Galloper", "Superior Epic Monster Hunter", "Elder Frozen Warden",
+    "Elder Bounty Hunter", "Ariel", "Warregal", "Jago",
+    "Demonic Salamander", "Eternal Cannoneer", "Warden", "Wyvern",
+  ],
+};
+
 // ─── TIER DEFINITIONS ─────────────────────────────────────────────────────────
-// E = Cannon (type C in sheet, mapped to E here)
 const TIER_DEFS = [
   { key:"G9", color:"#166534", bg:"#f0fdf4", border:"#16a34a" },
   { key:"G8", color:"#166534", bg:"#f0fdf4", border:"#16a34a" },
@@ -50,8 +68,8 @@ const TIER_DEFS = [
 ];
 const TIER_MAP = Object.fromEntries(TIER_DEFS.map(d => [d.key, d]));
 
-// Cannon type "C" in sheet → "E" in UI
-const normalizeTier = (tier) => (tier || "").replace(/^C/, "E");
+// All troop names (for initialising toggles)
+const ALL_TROOPS = [...Object.values(ROSTER).flat()];
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 const Icon = ({ name, size=22, color="currentColor" }) => {
@@ -74,106 +92,76 @@ const SecHeader = ({ title, action }) => (
 );
 
 // ─── TOGGLE SWITCH ────────────────────────────────────────────────────────────
-const ToggleSwitch = ({ on, onColor="#3b82f6", onClick, size=36 }) => (
-  <button
-    onClick={onClick}
-    style={{
-      width:size, height:Math.round(size*0.56), borderRadius:Math.round(size*0.28),
-      border:"none", cursor:"pointer", flexShrink:0,
-      backgroundColor: on ? onColor : "#cbd5e1",
-      position:"relative", padding:0, transition:"background 0.15s",
-    }}
-  >
-    <div style={{
-      width:Math.round(size*0.39), height:Math.round(size*0.39),
-      borderRadius:"50%", backgroundColor:"#fff",
-      position:"absolute",
-      top:Math.round(size*0.084),
-      left: on ? Math.round(size*0.53) : Math.round(size*0.084),
-      transition:"left 0.15s",
-      boxShadow:"0 1px 2px rgba(0,0,0,0.2)",
-    }}/>
+const ToggleSwitch = ({ on, onColor="#3b82f6", onClick }) => (
+  <button onClick={onClick} style={{ width:36, height:20, borderRadius:10, border:"none", cursor:"pointer", flexShrink:0, backgroundColor: on ? onColor : "#cbd5e1", position:"relative", padding:0, transition:"background 0.15s" }}>
+    <div style={{ width:14, height:14, borderRadius:7, backgroundColor:"#fff", position:"absolute", top:3, left: on ? 19 : 3, transition:"left 0.15s", boxShadow:"0 1px 2px rgba(0,0,0,0.2)" }}/>
   </button>
 );
 
 // ─── TROOP CHECKBOX ───────────────────────────────────────────────────────────
 const TroopCheck = ({ on, accentColor="#3b82f6", onClick }) => (
-  <button
-    onClick={onClick}
-    style={{
-      width:20, height:20, borderRadius:5, flexShrink:0, cursor:"pointer",
-      border:`2px solid ${on ? accentColor : "#cbd5e1"}`,
-      backgroundColor: on ? accentColor + "22" : "#f8fafc",
-      display:"flex", alignItems:"center", justifyContent:"center",
-    }}
-  >
-    {on && (
-      <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-        <polyline points="2,6 5,9 10,3" stroke={accentColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    )}
+  <button onClick={onClick} style={{ width:20, height:20, borderRadius:5, flexShrink:0, cursor:"pointer", border:`2px solid ${on ? accentColor : "#cbd5e1"}`, backgroundColor: on ? accentColor + "22" : "#f8fafc", display:"flex", alignItems:"center", justifyContent:"center" }}>
+    {on && <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke={accentColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
   </button>
 );
 
 // ─── STACK CALCULATOR ─────────────────────────────────────────────────────────
 const StackCalcScreen = () => {
-  const [lad,     setLad]     = useState({ leadership:"", authority:"", dominance:"" });
-  const [loading, setLoading] = useState(false);
-  const [result,  setResult]  = useState(null);   // { mercs, guards, monsters } normalised
-  const [error,   setError]   = useState(null);
-  const [copied,  setCopied]  = useState(false);
+  const [lad,      setLad]      = useState({ leadership:"", authority:"", dominance:"" });
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState(null);
+  const [copied,   setCopied]   = useState(false);
+  const [troopQty, setTroopQty] = useState({});   // populated after Calculate
 
-  // Tier toggles — exist before AND after calculate
+  // Toggle state — initialised from roster, persists across Calculate calls
   const [tierOn,   setTierOn]   = useState(() => Object.fromEntries(TIER_DEFS.map(d => [d.key, true])));
-  const [troopOn,  setTroopOn]  = useState({});   // { "Corax II":true, … } — set after calculate
-  const [expanded, setExpanded] = useState({});   // { G9:false, … } — collapsed by default
+  const [troopOn,  setTroopOn]  = useState(() => Object.fromEntries(ALL_TROOPS.map(n => [n, true])));
+  const [expanded, setExpanded] = useState({});   // all collapsed by default
 
   const [email, setEmail] = useState(() => {
     try { return localStorage.getItem("blueprint_stack_email") || ""; } catch { return ""; }
   });
 
-  // Normalise & store result — converts C→E for cannon tiers
-  const applyResult = (stack) => {
-    const guards   = (stack.guards   || []).map(t => ({ ...t, tier: normalizeTier(t.tier) }));
-    const monsters = (stack.monsters || []).map(t => ({ ...t, tier: normalizeTier(t.tier) }));
-    const mercs    = stack.mercs || [];
-    setResult({ guards, monsters, mercs });
+  const calculated = Object.keys(troopQty).length > 0;
+
+  // ── Toggles ──
+  const toggleTier = (key) => {
+    const newVal = !tierOn[key];
+    setTierOn(t => ({ ...t, [key]: newVal }));
+    setTroopOn(tr => {
+      const next = { ...tr };
+      (ROSTER[key] || []).forEach(n => { next[n] = newVal; });
+      return next;
+    });
   };
 
-  // When a new result arrives — reset troop toggles & expanded; preserve tierOn
-  useEffect(() => {
-    if (!result) return;
-    const trOn = {};
-    const exp = {};
-    TIER_DEFS.forEach(d => { exp[d.key] = false; });
-    // Mercs always start on; guards/monsters respect current tierOn
-    result.mercs.forEach(t => { trOn[t.name] = true; });
-    [...result.guards, ...result.monsters].forEach(t => { trOn[t.name] = tierOn[t.tier] !== false; });
-    setTroopOn(trOn);
-    setExpanded(exp);
-    requestAnimationFrame(() => window.scrollTo({ top:0, behavior:"smooth" }));
-  }, [result]);
+  const toggleTroop  = (name) => setTroopOn(tr => ({ ...tr, [name]: !tr[name] }));
+  const toggleExpand = (key)  => setExpanded(e  => ({ ...e,  [key]: !e[key]  }));
 
-  // ── API call ──
+  // ── Calculate ──
   const calculate = async () => {
     if (!stackEnabled()) return;
     setLoading(true);
     setError(null);
-    setResult(null);
     try {
       const res = await fetch(STACK_URL, {
-        method:  "POST",
-        headers: { "Content-Type":"text/plain" },
-        body:    JSON.stringify({
+        method:"POST", headers:{"Content-Type":"text/plain"},
+        body: JSON.stringify({
           leadership: Number(lad.leadership) || 0,
           authority:  Number(lad.authority)  || 0,
           dominance:  Number(lad.dominance)  || 0,
         }),
-        redirect: "follow",
+        redirect:"follow",
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      applyResult(data.stack);
+      // Map quantities by troop name
+      const qty = {};
+      (data.stack?.mercs    || []).forEach(t => { qty[t.name] = t.qty; });
+      (data.stack?.guards   || []).forEach(t => { qty[t.name] = t.qty; });
+      (data.stack?.monsters || []).forEach(t => { qty[t.name] = t.qty; });
+      setTroopQty(qty);
+      requestAnimationFrame(() => window.scrollTo({ top:0, behavior:"smooth" }));
     } catch (err) {
       setError(err.message || "Could not reach the calculator. Check the URL and try again.");
     } finally {
@@ -181,136 +169,111 @@ const StackCalcScreen = () => {
     }
   };
 
-  // ── Tier toggle: flip tier; sync troopOn only when results are loaded ──
-  const toggleTier = (key) => {
-    const newVal = !tierOn[key];
-    setTierOn(t => ({ ...t, [key]: newVal }));
-    if (result) {
-      const affected = [...(result.guards||[]), ...(result.monsters||[])]
-        .filter(t => t.tier === key).map(t => t.name);
-      setTroopOn(tr => {
-        const next = { ...tr };
-        affected.forEach(n => { next[n] = newVal; });
-        return next;
-      });
-    }
+  // ── Effective troops (toggled on + have a quantity) ──
+  const effectiveMercs = () =>
+    ROSTER.MERCS.filter(n => troopOn[n] && troopQty[n] > 0).map(n => ({ name:n, qty:troopQty[n] }));
+
+  const effectiveTier = (key) =>
+    (ROSTER[key] || []).filter(n => tierOn[key] && troopOn[n] && troopQty[n] > 0).map(n => ({ name:n, qty:troopQty[n] }));
+
+  const totalActive = () => {
+    const mercs = ROSTER.MERCS.filter(n => troopOn[n] && troopQty[n] > 0).length;
+    const tiers  = TIER_DEFS.reduce((acc, {key}) => acc + effectiveTier(key).length, 0);
+    return mercs + tiers;
   };
-
-  const toggleTroop  = (name) => setTroopOn(tr => ({ ...tr, [name]: !tr[name] }));
-  const toggleExpand = (key)  => setExpanded(e  => ({ ...e,  [key]: !e[key]  }));
-
-  // ── Helpers ──
-  const guardsByTier   = (k) => (result?.guards   || []).filter(t => t.tier === k);
-  const monstersByTier = (k) => (result?.monsters || []).filter(t => t.tier === k);
-
-  const effectiveMercs    = () => (result?.mercs    || []).filter(t => troopOn[t.name]  !== false);
-  const effectiveGuards   = () => (result?.guards   || []).filter(t => tierOn[t.tier] !== false && troopOn[t.name] !== false);
-  const effectiveMonsters = () => (result?.monsters || []).filter(t => tierOn[t.tier] !== false && troopOn[t.name] !== false);
-  const totalActive = () => effectiveMercs().length + effectiveGuards().length + effectiveMonsters().length;
 
   // ── Copy ──
   const copyToClipboard = () => {
+    if (!calculated) return;
     const lines = [];
-    const em = effectiveMercs(), eg = effectiveGuards(), emon = effectiveMonsters();
-    if (em.length)   { lines.push("MERCS");    em.forEach(t => lines.push(`  ${t.name}: ${t.qty.toLocaleString()}`)   ); }
-    if (eg.length)   { lines.push("GUARDS");   eg.forEach(t => lines.push(`  [${t.tier}] ${t.name}: ${t.qty.toLocaleString()}`) ); }
-    if (emon.length) { lines.push("MONSTERS"); emon.forEach(t => lines.push(`  [${t.tier}] ${t.name}: ${t.qty.toLocaleString()}`)); }
+    const em = effectiveMercs();
+    if (em.length) { lines.push("MERCS"); em.forEach(t => lines.push(`  ${t.name}: ${t.qty.toLocaleString()}`)); }
+    TIER_DEFS.forEach(({key}) => {
+      const et = effectiveTier(key);
+      if (et.length) { lines.push(key); et.forEach(t => lines.push(`  ${t.name}: ${t.qty.toLocaleString()}`)); }
+    });
     const text = lines.join("\n");
     const done = () => { setCopied(true); setTimeout(() => setCopied(false), 2500); };
     if (navigator.clipboard?.writeText) { navigator.clipboard.writeText(text).then(done); }
-    else {
-      const el = document.createElement("textarea");
-      el.value = text; document.body.appendChild(el); el.select(); document.execCommand("copy"); document.body.removeChild(el);
-      done();
-    }
+    else { const el = document.createElement("textarea"); el.value=text; document.body.appendChild(el); el.select(); document.execCommand("copy"); document.body.removeChild(el); done(); }
   };
 
   // ── Download CSV ──
   const downloadCSV = () => {
-    if (!result) return;
-    const rows = [["Group","Tier","Name","Quantity"]];
-    effectiveMercs().forEach(t    => rows.push(["Mercs",    "",      t.name, t.qty]));
-    effectiveGuards().forEach(t   => rows.push(["Guards",   t.tier,  t.name, t.qty]));
-    effectiveMonsters().forEach(t => rows.push(["Monsters", t.tier,  t.name, t.qty]));
+    if (!calculated) return;
+    const rows = [["Group","Name","Quantity"]];
+    effectiveMercs().forEach(t => rows.push(["Mercs", t.name, t.qty]));
+    TIER_DEFS.forEach(({key}) => effectiveTier(key).forEach(t => rows.push([key, t.name, t.qty])));
     const csv  = rows.map(r => r.join(",")).join("\n");
     const blob = new Blob([csv], { type:"text/csv" });
     const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href = url; a.download = `stack_${new Date().toISOString().slice(0,10)}.csv`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const a    = document.createElement("a"); a.href=url; a.download=`stack_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   };
 
   // ── Email ──
-  const saveEmail = (v) => { setEmail(v); try { localStorage.setItem("blueprint_stack_email", v); } catch {} };
+  const saveEmail = v => { setEmail(v); try { localStorage.setItem("blueprint_stack_email", v); } catch {} };
   const openEmail = () => {
-    if (!result) return;
+    if (!calculated) return;
     const lines = [];
-    effectiveMercs().forEach(t    => lines.push(`${t.name}: ${t.qty.toLocaleString()}`));
-    effectiveGuards().forEach(t   => lines.push(`[${t.tier}] ${t.name}: ${t.qty.toLocaleString()}`));
-    effectiveMonsters().forEach(t => lines.push(`[${t.tier}] ${t.name}: ${t.qty.toLocaleString()}`));
+    effectiveMercs().forEach(t => lines.push(`${t.name}: ${t.qty.toLocaleString()}`));
+    TIER_DEFS.forEach(({key}) => effectiveTier(key).forEach(t => lines.push(`[${key}] ${t.name}: ${t.qty.toLocaleString()}`)));
     const subject = encodeURIComponent(`Stack Calculator Results — ${new Date().toLocaleDateString()}`);
-    const body    = encodeURIComponent(lines.join("\n"));
-    window.location.href = `mailto:${encodeURIComponent(email.trim())}?subject=${subject}&body=${body}`;
+    window.location.href = `mailto:${encodeURIComponent(email.trim())}?subject=${subject}&body=${encodeURIComponent(lines.join("\n"))}`;
   };
 
   // ── LAD field ──
   const ladField = (key, label) => (
     <div key={key} style={{ flex:1 }}>
       <div style={{ fontSize:11, fontWeight:700, color:"#64748b", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:4 }}>{label}</div>
-      <input
-        type="number" inputMode="numeric" placeholder="0" value={lad[key]}
+      <input type="number" inputMode="numeric" placeholder="0" value={lad[key]}
         onChange={e => setLad(l => ({ ...l, [key]: e.target.value }))}
         style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #e2e8f0", borderRadius:10, fontSize:15, fontWeight:600, fontFamily:"'DM Mono',monospace", color:"#1e293b", backgroundColor:"#fff", textAlign:"right" }}
       />
     </div>
   );
 
-  // ── Tier section renderer ──
-  const renderTierSection = (tierKey, troops) => {
-    if (!troops.length) return null;
-    const def   = TIER_MAP[tierKey];
-    const isOn  = tierOn[tierKey] !== false;
-    const isExp = expanded[tierKey];
+  // ── Collapsible section renderer (used for both tiers and mercs) ──
+  const renderSection = ({ sectionKey, label, def, troops, isTier }) => {
+    const isOn  = isTier ? tierOn[sectionKey] : true;
+    const isExp = expanded[sectionKey];
+    const borderColor = def ? (isOn ? def.border : "#e2e8f0") : "#e2e8f0";
+    const bgColor     = def ? (isOn ? def.bg    : "#f8fafc") : "#f8fafc";
+    const labelColor  = def ? (isOn ? def.color : "#94a3b8") : "#7c3aed";
+    const checkColor  = def ? def.border : "#8b5cf6";
+
     return (
-      <div key={tierKey} style={{ marginBottom:8 }}>
+      <div key={sectionKey} style={{ marginBottom:8 }}>
         {/* Header */}
         <div
-          onClick={() => toggleExpand(tierKey)}
-          style={{
-            display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
-            backgroundColor: isOn ? def.bg : "#f8fafc",
-            borderRadius: isExp ? "10px 10px 0 0" : 10,
-            border:`1.5px solid ${isOn ? def.border : "#e2e8f0"}`,
-            cursor:"pointer", userSelect:"none", transition:"background 0.15s",
-          }}
+          onClick={() => toggleExpand(sectionKey)}
+          style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", backgroundColor: bgColor, borderRadius: isExp ? "10px 10px 0 0" : 10, border:`1.5px solid ${borderColor}`, cursor:"pointer", userSelect:"none", transition:"background 0.15s" }}
         >
-          <ToggleSwitch
-            on={isOn} onColor={def.border} size={36}
-            onClick={e => { e.stopPropagation(); toggleTier(tierKey); }}
-          />
-          <span style={{ fontSize:14, fontWeight:800, color: isOn ? def.color : "#94a3b8", fontFamily:"'DM Mono',monospace", minWidth:28 }}>{tierKey}</span>
+          {isTier && (
+            <ToggleSwitch on={isOn} onColor={def.border}
+              onClick={e => { e.stopPropagation(); toggleTier(sectionKey); }}
+            />
+          )}
+          <span style={{ fontSize:14, fontWeight:800, color: labelColor, fontFamily:"'DM Mono',monospace", minWidth:32 }}>{label}</span>
           <span style={{ flex:1, fontSize:12, color:"#94a3b8" }}>{troops.length} troop{troops.length !== 1 ? "s" : ""}</span>
           <span style={{ color:"#94a3b8", fontSize:11, display:"inline-block", transform: isExp ? "rotate(180deg)" : "none", transition:"transform 0.15s" }}>▾</span>
         </div>
 
-        {/* Expanded troop list */}
+        {/* Troop list */}
         {isExp && (
-          <div style={{ border:`1.5px solid ${isOn ? def.border : "#e2e8f0"}`, borderTop:"none", borderRadius:"0 0 10px 10px", overflow:"hidden", backgroundColor:"#fff" }}>
-            {troops.map((t, i) => {
-              const tOn = troopOn[t.name] !== false;
+          <div style={{ border:`1.5px solid ${borderColor}`, borderTop:"none", borderRadius:"0 0 10px 10px", overflow:"hidden", backgroundColor:"#fff" }}>
+            {troops.map((name, i) => {
+              const tOn = troopOn[name] !== false;
+              const qty  = troopQty[name];
+              const active = (isTier ? isOn : true) && tOn;
               return (
-                <div
-                  key={i}
-                  style={{
-                    display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
-                    borderBottom: i < troops.length - 1 ? "1px solid #f1f5f9" : "none",
-                    opacity: isOn && tOn ? 1 : 0.38, transition:"opacity 0.15s",
-                  }}
-                >
-                  <TroopCheck on={tOn && isOn} accentColor={def.border} onClick={() => toggleTroop(t.name)} />
-                  <span style={{ flex:1, fontSize:13, fontWeight:600, color:"#1e293b" }}>{t.name}</span>
-                  <span style={{ fontSize:14, fontWeight:700, color:"#1e293b", fontFamily:"'DM Mono',monospace" }}>{t.qty.toLocaleString()}</span>
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", borderBottom: i < troops.length-1 ? "1px solid #f1f5f9" : "none", opacity: active ? 1 : 0.38, transition:"opacity 0.15s" }}>
+                  <TroopCheck on={active} accentColor={checkColor} onClick={() => toggleTroop(name)} />
+                  <span style={{ flex:1, fontSize:13, fontWeight:600, color:"#1e293b" }}>{name}</span>
+                  {qty !== undefined
+                    ? <span style={{ fontSize:14, fontWeight:700, color:"#1e293b", fontFamily:"'DM Mono',monospace" }}>{qty.toLocaleString()}</span>
+                    : <span style={{ fontSize:12, color:"#cbd5e1", fontFamily:"'DM Mono',monospace" }}>—</span>
+                  }
                 </div>
               );
             })}
@@ -320,46 +283,15 @@ const StackCalcScreen = () => {
     );
   };
 
-  // ── Mercs section (flat, no tier) ──
-  const renderMercs = () => {
-    const mercs = result?.mercs || [];
-    if (!mercs.length) return null;
-    return (
-      <div style={{ marginBottom:14 }}>
-        <div style={{ fontSize:11, fontWeight:700, color:"#7c3aed", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:6 }}>Mercs</div>
-        <div style={{ backgroundColor:"#fff", borderRadius:12, border:"1.5px solid #e2e8f0", overflow:"hidden" }}>
-          {mercs.map((t, i) => {
-            const tOn = troopOn[t.name] !== false;
-            return (
-              <div
-                key={i}
-                style={{
-                  display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
-                  borderBottom: i < mercs.length - 1 ? "1px solid #f1f5f9" : "none",
-                  opacity: tOn ? 1 : 0.38, transition:"opacity 0.15s",
-                }}
-              >
-                <TroopCheck on={tOn} accentColor="#8b5cf6" onClick={() => toggleTroop(t.name)} />
-                <span style={{ flex:1, fontSize:13, fontWeight:600, color:"#1e293b" }}>{t.name}</span>
-                <span style={{ fontSize:14, fontWeight:700, color:"#1e293b", fontFamily:"'DM Mono',monospace" }}>{t.qty.toLocaleString()}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  const activeCount = result ? totalActive() : 0;
+  const active = calculated ? totalActive() : null;
 
   return (
     <div style={{ padding:"16px 16px 32px" }}>
 
-      {/* Stack URL not configured */}
       {!stackEnabled() && (
         <div style={{ backgroundColor:"#fef3c7", border:"1.5px solid #fbbf24", borderRadius:12, padding:"14px 16px", marginBottom:18 }}>
           <div style={{ fontSize:13, fontWeight:700, color:"#92400e", marginBottom:4 }}>Stack Calculator not configured</div>
-          <div style={{ fontSize:12, color:"#92400e", lineHeight:1.5 }}>Deploy AppScript_StackCalc.gs as a Web App, then paste the /exec URL into STACK_URL in index.html.</div>
+          <div style={{ fontSize:12, color:"#92400e", lineHeight:1.5 }}>Deploy AppScript_StackCalc.gs as a Web App, then paste the /exec URL into STACK_URL.</div>
         </div>
       )}
 
@@ -373,51 +305,10 @@ const StackCalcScreen = () => {
         </div>
       </div>
 
-      {/* Tier selector — visible before and after Calculate */}
-      <div style={{ marginBottom:20 }}>
-        <SecHeader title="Troop Tiers"/>
-        <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:8 }}>
-          {TIER_DEFS.map(def => {
-            const isOn = tierOn[def.key];
-            return (
-              <button
-                key={def.key}
-                onClick={() => toggleTier(def.key)}
-                style={{
-                  padding:"8px 16px", borderRadius:8, cursor:"pointer",
-                  border:`2px solid ${isOn ? def.border : "#e2e8f0"}`,
-                  backgroundColor: isOn ? def.bg : "#f8fafc",
-                  color: isOn ? def.color : "#94a3b8",
-                  fontSize:13, fontWeight:800, fontFamily:"'DM Mono',monospace",
-                  transition:"all 0.12s",
-                }}
-              >{def.key}</button>
-            );
-          })}
-        </div>
-        <div style={{ display:"flex", gap:8 }}>
-          <button
-            onClick={() => setTierOn(Object.fromEntries(TIER_DEFS.map(d => [d.key, true])))}
-            style={{ flex:1, padding:"7px 0", borderRadius:8, border:"1.5px solid #e2e8f0", backgroundColor:"#f8fafc", fontSize:12, fontWeight:600, color:"#64748b", cursor:"pointer" }}
-          >Select all</button>
-          <button
-            onClick={() => setTierOn(Object.fromEntries(TIER_DEFS.map(d => [d.key, false])))}
-            style={{ flex:1, padding:"7px 0", borderRadius:8, border:"1.5px solid #e2e8f0", backgroundColor:"#f8fafc", fontSize:12, fontWeight:600, color:"#64748b", cursor:"pointer" }}
-          >Clear all</button>
-        </div>
-      </div>
-
       {/* Calculate button */}
       <button
-        onClick={calculate}
-        disabled={loading || !stackEnabled()}
-        style={{
-          width:"100%", padding:"14px 0", borderRadius:12, border:"none",
-          backgroundColor: loading || !stackEnabled() ? "#94a3b8" : "#1e293b",
-          color:"#fff", fontSize:15, fontWeight:700,
-          cursor: loading || !stackEnabled() ? "default" : "pointer",
-          marginBottom:20, display:"flex", alignItems:"center", justifyContent:"center", gap:8,
-        }}
+        onClick={calculate} disabled={loading || !stackEnabled()}
+        style={{ width:"100%", padding:"14px 0", borderRadius:12, border:"none", backgroundColor: loading || !stackEnabled() ? "#94a3b8" : "#1e293b", color:"#fff", fontSize:15, fontWeight:700, cursor: loading || !stackEnabled() ? "default" : "pointer", marginBottom:20, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}
       >
         {loading
           ? <><div style={{ width:16, height:16, border:"2.5px solid #ffffff66", borderTopColor:"#fff", borderRadius:8, animation:"spin 0.7s linear infinite" }}/> Calculating…</>
@@ -427,69 +318,48 @@ const StackCalcScreen = () => {
 
       {/* Error */}
       {error && (
-        <div style={{ backgroundColor:"#fef2f2", border:"1.5px solid #fca5a5", borderRadius:12, padding:"12px 16px", marginBottom:16, fontSize:13, color:"#dc2626", fontWeight:600 }}>
-          {error}
-        </div>
+        <div style={{ backgroundColor:"#fef2f2", border:"1.5px solid #fca5a5", borderRadius:12, padding:"12px 16px", marginBottom:16, fontSize:13, color:"#dc2626", fontWeight:600 }}>{error}</div>
       )}
 
-      {/* Results */}
-      {result && (
+      {/* Post-calculate header + export */}
+      {calculated && (
         <div>
-          {/* Header row */}
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
             <span style={{ fontSize:12, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.08em" }}>
-              {activeCount} active troop type{activeCount !== 1 ? "s" : ""}
+              {active} active troop type{active !== 1 ? "s" : ""}
             </span>
-            <button
-              onClick={copyToClipboard}
-              style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:8, border:"1.5px solid #e2e8f0", backgroundColor: copied ? "#f0fdf4" : "#fff", fontSize:12, fontWeight:700, color: copied ? "#16a34a" : "#1e293b", cursor:"pointer" }}
-            >
+            <button onClick={copyToClipboard} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:8, border:"1.5px solid #e2e8f0", backgroundColor: copied ? "#f0fdf4" : "#fff", fontSize:12, fontWeight:700, color: copied ? "#16a34a" : "#1e293b", cursor:"pointer" }}>
               <Icon name="copy" size={14} color={copied ? "#16a34a" : "#1e293b"}/>
               {copied ? "Copied!" : "Copy"}
             </button>
           </div>
-
-          {/* Export actions */}
           <div style={{ backgroundColor:"#fff", borderRadius:12, border:"1.5px solid #e2e8f0", padding:"14px", marginBottom:16 }}>
             <div style={{ fontSize:11, fontWeight:700, color:"#64748b", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:10 }}>Export results</div>
             <div style={{ marginBottom:10 }}>
-              <input
-                type="email" inputMode="email" placeholder="your@email.com" value={email}
-                onChange={e => saveEmail(e.target.value)}
+              <input type="email" inputMode="email" placeholder="your@email.com" value={email} onChange={e => saveEmail(e.target.value)}
                 style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #e2e8f0", borderRadius:10, fontSize:14, color:"#1e293b", backgroundColor:"#f8fafc" }}
               />
             </div>
             <div style={{ display:"flex", gap:8 }}>
-              <button
-                onClick={downloadCSV}
-                style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"11px 0", borderRadius:10, border:"1.5px solid #e2e8f0", backgroundColor:"#f8fafc", fontSize:13, fontWeight:700, color:"#1e293b", cursor:"pointer" }}
-              >
-                <Icon name="download" size={16} color="#1e293b"/>
-                Download CSV
+              <button onClick={downloadCSV} style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"11px 0", borderRadius:10, border:"1.5px solid #e2e8f0", backgroundColor:"#f8fafc", fontSize:13, fontWeight:700, color:"#1e293b", cursor:"pointer" }}>
+                <Icon name="download" size={16} color="#1e293b"/> Download CSV
               </button>
-              <button
-                onClick={openEmail}
-                disabled={!email.trim()}
-                style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"11px 0", borderRadius:10, border:"none", backgroundColor: email.trim() ? "#1e293b" : "#94a3b8", fontSize:13, fontWeight:700, color:"#fff", cursor: email.trim() ? "pointer" : "default" }}
-              >
+              <button onClick={openEmail} disabled={!email.trim()} style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"11px 0", borderRadius:10, border:"none", backgroundColor: email.trim() ? "#1e293b" : "#94a3b8", fontSize:13, fontWeight:700, color:"#fff", cursor: email.trim() ? "pointer" : "default" }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
                 Email results
               </button>
             </div>
-            {!email.trim() && (
-              <div style={{ fontSize:11, color:"#94a3b8", marginTop:6, textAlign:"center" }}>Enter an email address to enable the email button</div>
-            )}
+            {!email.trim() && <div style={{ fontSize:11, color:"#94a3b8", marginTop:6, textAlign:"center" }}>Enter an email address to enable the email button</div>}
           </div>
-
-          {/* Mercs — flat list, preserved order */}
-          {renderMercs()}
-
-          {/* Guards & Monsters — collapsible tier sections in order */}
-          {TIER_DEFS.map(({ key }) => {
-            const troops = key.startsWith("M") ? monstersByTier(key) : guardsByTier(key);
-            return renderTierSection(key, troops);
-          })}
         </div>
+      )}
+
+      {/* Mercs section */}
+      {renderSection({ sectionKey:"MERCS", label:"Mercs", def:null, troops:ROSTER.MERCS, isTier:false })}
+
+      {/* Tier sections */}
+      {TIER_DEFS.map(def =>
+        renderSection({ sectionKey:def.key, label:def.key, def, troops:ROSTER[def.key] || [], isTier:true })
       )}
     </div>
   );
@@ -498,8 +368,6 @@ const StackCalcScreen = () => {
 // ─── APP SHELL ────────────────────────────────────────────────────────────────
 const App = () => (
   <div style={{ maxWidth:480, margin:"0 auto", minHeight:"100vh", display:"flex", flexDirection:"column", backgroundColor:"#f8fafc" }}>
-
-    {/* Header */}
     <div style={{ padding:"16px 16px 12px", backgroundColor:"#fff", borderBottom:"1px solid #f1f5f9", position:"sticky", top:0, zIndex:50 }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -512,21 +380,14 @@ const App = () => (
           onClick={() => alert("Sign-in coming soon.\nYour stacks will be saved to your account once this is set up.")}
           style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 14px", borderRadius:8, border:"1.5px solid #e2e8f0", backgroundColor:"#f8fafc", fontSize:12, fontWeight:700, color:"#1e293b", cursor:"pointer" }}
         >
-          <Icon name="user" size={13} color="#1e293b"/>
-          Sign in
+          <Icon name="user" size={13} color="#1e293b"/> Sign in
         </button>
       </div>
-
-      {/* Tab bar (single tab for now) */}
       <div style={{ display:"flex", gap:4 }}>
         <div style={{ padding:"6px 14px", borderRadius:8, backgroundColor:"#1e293b", fontSize:12, fontWeight:700, color:"#fff" }}>Stack Calculator</div>
       </div>
     </div>
-
-    {/* Main content */}
-    <div style={{ flex:1 }}>
-      <StackCalcScreen/>
-    </div>
+    <div style={{ flex:1 }}><StackCalcScreen/></div>
   </div>
 );
 
