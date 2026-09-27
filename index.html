@@ -122,9 +122,9 @@ const StackCalcScreen = () => {
   const [error,   setError]   = useState(null);
   const [copied,  setCopied]  = useState(false);
 
-  // Post-calculate toggle state
-  const [tierOn,   setTierOn]   = useState({});   // { G9:true, S8:false, … }
-  const [troopOn,  setTroopOn]  = useState({});   // { "Corax II":true, … }
+  // Tier toggles — exist before AND after calculate
+  const [tierOn,   setTierOn]   = useState(() => Object.fromEntries(TIER_DEFS.map(d => [d.key, true])));
+  const [troopOn,  setTroopOn]  = useState({});   // { "Corax II":true, … } — set after calculate
   const [expanded, setExpanded] = useState({});   // { G9:false, … } — collapsed by default
 
   const [email, setEmail] = useState(() => {
@@ -139,15 +139,15 @@ const StackCalcScreen = () => {
     setResult({ guards, monsters, mercs });
   };
 
-  // Init toggles whenever a new result arrives
+  // When a new result arrives — reset troop toggles & expanded; preserve tierOn
   useEffect(() => {
     if (!result) return;
-    const tOn = {};
     const trOn = {};
     const exp = {};
-    TIER_DEFS.forEach(d => { tOn[d.key] = true; exp[d.key] = false; });
-    [...result.guards, ...result.monsters, ...result.mercs].forEach(t => { trOn[t.name] = true; });
-    setTierOn(tOn);
+    TIER_DEFS.forEach(d => { exp[d.key] = false; });
+    // Mercs always start on; guards/monsters respect current tierOn
+    result.mercs.forEach(t => { trOn[t.name] = true; });
+    [...result.guards, ...result.monsters].forEach(t => { trOn[t.name] = tierOn[t.tier] !== false; });
     setTroopOn(trOn);
     setExpanded(exp);
     requestAnimationFrame(() => window.scrollTo({ top:0, behavior:"smooth" }));
@@ -180,17 +180,19 @@ const StackCalcScreen = () => {
     }
   };
 
-  // ── Tier toggle: flip tier + sync all its troop toggles ──
+  // ── Tier toggle: flip tier; sync troopOn only when results are loaded ──
   const toggleTier = (key) => {
     const newVal = !tierOn[key];
     setTierOn(t => ({ ...t, [key]: newVal }));
-    const affected = [...(result?.guards||[]), ...(result?.monsters||[])]
-      .filter(t => t.tier === key).map(t => t.name);
-    setTroopOn(tr => {
-      const next = { ...tr };
-      affected.forEach(n => { next[n] = newVal; });
-      return next;
-    });
+    if (result) {
+      const affected = [...(result.guards||[]), ...(result.monsters||[])]
+        .filter(t => t.tier === key).map(t => t.name);
+      setTroopOn(tr => {
+        const next = { ...tr };
+        affected.forEach(n => { next[n] = newVal; });
+        return next;
+      });
+    }
   };
 
   const toggleTroop  = (name) => setTroopOn(tr => ({ ...tr, [name]: !tr[name] }));
@@ -367,6 +369,40 @@ const StackCalcScreen = () => {
           {ladField("leadership","Leadership")}
           {ladField("authority","Authority")}
           {ladField("dominance","Dominance")}
+        </div>
+      </div>
+
+      {/* Tier selector — visible before and after Calculate */}
+      <div style={{ marginBottom:20 }}>
+        <SecHeader title="Troop Tiers"/>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:8 }}>
+          {TIER_DEFS.map(def => {
+            const isOn = tierOn[def.key];
+            return (
+              <button
+                key={def.key}
+                onClick={() => toggleTier(def.key)}
+                style={{
+                  padding:"8px 16px", borderRadius:8, cursor:"pointer",
+                  border:`2px solid ${isOn ? def.border : "#e2e8f0"}`,
+                  backgroundColor: isOn ? def.bg : "#f8fafc",
+                  color: isOn ? def.color : "#94a3b8",
+                  fontSize:13, fontWeight:800, fontFamily:"'DM Mono',monospace",
+                  transition:"all 0.12s",
+                }}
+              >{def.key}</button>
+            );
+          })}
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          <button
+            onClick={() => setTierOn(Object.fromEntries(TIER_DEFS.map(d => [d.key, true])))}
+            style={{ flex:1, padding:"7px 0", borderRadius:8, border:"1.5px solid #e2e8f0", backgroundColor:"#f8fafc", fontSize:12, fontWeight:600, color:"#64748b", cursor:"pointer" }}
+          >Select all</button>
+          <button
+            onClick={() => setTierOn(Object.fromEntries(TIER_DEFS.map(d => [d.key, false])))}
+            style={{ flex:1, padding:"7px 0", borderRadius:8, border:"1.5px solid #e2e8f0", backgroundColor:"#f8fafc", fontSize:12, fontWeight:600, color:"#64748b", cursor:"pointer" }}
+          >Clear all</button>
         </div>
       </div>
 
