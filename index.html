@@ -1,4 +1,4 @@
-<!-- Blueprint Stack Calculator v11 — 2026-09-27 -->
+<!-- Blueprint Stack Calculator v12 — 2026-09-27 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -23,9 +23,9 @@
 <body>
 <div id="root"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js?v=11"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js?v=11"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js?v=11"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js?v=12"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js?v=12"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js?v=12"></script>
 
 <script type="text/babel">
 const { useState } = React;
@@ -157,9 +157,11 @@ const StackCalcScreen = () => {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      const mercs    = data.stack?.mercs    || [];
-      const guards   = data.stack?.guards   || [];
-      const monsters = data.stack?.monsters || [];
+      // Normalise names from API (sheet may have double-spaces e.g. "Punisher  II")
+      const norm = arr => (arr || []).map(t => ({ ...t, name: (t.name||"").replace(/\s+/g," ").trim() }));
+      const mercs    = norm(data.stack?.mercs);
+      const guards   = norm(data.stack?.guards);
+      const monsters = norm(data.stack?.monsters);
       const qty = {};
       [...mercs, ...guards, ...monsters].forEach(t => { qty[t.name] = t.qty; });
       setTroopQty(qty);
