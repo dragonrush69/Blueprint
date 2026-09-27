@@ -1,4 +1,4 @@
-<!-- Blueprint Stack Calculator v13 — 2026-09-27 -->
+<!-- Blueprint Stack Calculator v14 — 2026-09-27 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -164,6 +164,8 @@ const StackCalcScreen = () => {
       const monsters = norm(data.stack?.monsters);
       const qty = {};
       [...mercs, ...guards, ...monsters].forEach(t => { qty[t.name] = t.qty; });
+      console.log("guards from API:", JSON.stringify(guards.slice(0,3)));
+      console.log("monsters from API:", JSON.stringify(monsters.slice(0,3)));
       setTroopQty(qty);
       setResultOrder({ mercs, guards, monsters });
       requestAnimationFrame(() => window.scrollTo({ top:0, behavior:"smooth" }));
@@ -337,10 +339,15 @@ const StackCalcScreen = () => {
             );
           };
           // Mercs: ROSTER order, 0 if toggled off
-          const mercItems = ROSTER.MERCS.map(n => ({ name:n, qty: troopOn[n] !== false ? (troopQty[n]||0) : 0 }));
-          // Guards/Monsters: API (sheet) order, filtered to known ROSTER troops
-          const monsterItems = resultOrder.monsters.filter(t => ROSTER_SET.has(t.name));
-          const guardItems   = resultOrder.guards.filter(t => ROSTER_SET.has(t.name));
+          // Use sheet order from API (Grim Stalker last); supplement toggled-off mercs with qty 0
+          const apiMercSet = new Set(resultOrder.mercs.map(t => t.name));
+          const mercItems = [
+            ...resultOrder.mercs,
+            ...ROSTER.MERCS.filter(n => !apiMercSet.has(n)).map(n => ({ name:n, qty:0 }))
+          ];
+          // Guards/Monsters: API order, no filter — show everything returned
+          const monsterItems = resultOrder.monsters;
+          const guardItems   = resultOrder.guards;
           return (<>
             {flatSection("Mercs", mercItems)}
             {flatSection("Monsters", monsterItems)}
