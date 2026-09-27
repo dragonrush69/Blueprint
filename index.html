@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+  <title>Blueprint — Stack Calculator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500;600;700&display=swap"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #f8fafc; font-family: 'DM Sans', sans-serif; -webkit-text-size-adjust: 100%; }
+    #root { min-height: 100%; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+    input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const STACK_URL = "https://script.google.com/macros/s/AKfycbxj6Z6w-BlCvnnwvhgm_FuHBlbRXbw4tVuRrGovMhb7u0PPoNAnlWnrCF5TSAme-S6OQw/exec";
+
+// Blueprint Supabase — ready for auth / save stacks
+const SUPABASE_URL  = "https://hzafcayebsrlxvtuxzyu.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6YWZjYXllYnNybHh2dHV4enl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MDcwMTMsImV4cCI6MjEwNjA4MzAxM30.5su9jJMgZSEYNUQnlwtzMYgMU40dTbnOphTkKBccJLc";
+
+const stackEnabled = () => STACK_URL && !STACK_URL.startsWith("YOUR_");
+
+const scrollToTop = () => requestAnimationFrame(() => {
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
+// ─── ICONS ────────────────────────────────────────────────────────────────────
+const Icon = ({ name, size=22, color="currentColor" }) => {
+  const s = { width:size, height:size, viewBox:"0 0 24 24", fill:"none", stroke:color, strokeWidth:"2", strokeLinecap:"round", strokeLinejoin:"round" };
+  const icons = {
+    calc:     <svg {...s}><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/></svg>,
+    copy:     <svg {...s}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>,
+    download: <svg {...s}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
+    warning:  <svg {...s}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
+    user:     <svg {...s}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+    blueprint:<svg {...s}><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="21"/></svg>,
+  };
+  return icons[name] || null;
+};
+
+const SecHeader = ({ title, action }) => (
+  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+    <span style={{ fontSize:12, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.08em" }}>{title}</span>
+    {action}
+  </div>
+);
+
+// ─── STACK CALCULATOR ─────────────────────────────────────────────────────────
+const TIER_COLS = [
+  { type:"G", label:"Guard"   },
+  { type:"S", label:"Spec"    },
+  { type:"E", label:"Cannon"  },
+  { type:"M", label:"Monster" },
+];
+const TIER_LEVELS = [9, 8, 7, 6];
+const DEFAULT_TIERS = {
+  E9:false, G9:false, S9:false, M9:false,
+  E8:false, G8:false, S8:false, M8:false,
+  E7:false, G7:false, S7:false, M7:false,
+  E6:false, G6:false, S6:false, M6:false,
+};
+
+const StackCalcScreen = () => {
+  const [lad,     setLad]     = useState({ leadership:"", authority:"", dominance:"" });
+  const [tiers,   setTiers]   = useState({ ...DEFAULT_TIERS });
+  const [loading, setLoading] = useState(false);
+  const [result,  setResult]  = useState(null);
+  const [error,   setError]   = useState(null);
+  const [copied,  setCopied]  = useState(false);
+  const [email,   setEmail]   = useState(() => {
+    try { return localStorage.getItem("blueprint_stack_email") || ""; } catch { return ""; }
+  });
+
+  const toggleTier = (key) => setTiers(t => ({ ...t, [key]: !t[key] }));
+
+  const calculate = async () => {
+    if (!stackEnabled()) return;
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch(STACK_URL, {
+        method:   "POST",
+        headers:  { "Content-Type": "text/plain" },
+        body:     JSON.stringify({
+          leadership: Number(lad.leadership) || 0,
+          authority:  Number(lad.authority)  || 0,
+          dominance:  Number(lad.dominance)  || 0,
+          tiers,
+        }),
+        redirect: "follow",
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setResult(data.stack);
+    } catch (err) {
+      setError(err.message || "Could not reach the calculator. Check the URL and try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { if (result) scrollToTop(); }, [result]);
+
+  const copyToClipboard = () => {
+    if (!result) return;
+    const lines = [];
+    if (result.mercs?.length)    { lines.push("MERCS");    result.mercs.forEach(t => lines.push(`  ${t.name}: ${t.qty.toLocaleString()}`)); }
+    if (result.monsters?.length) { lines.push("MONSTERS"); result.monsters.forEach(t => lines.push(`  ${t.name}: ${t.qty.toLocaleString()}`)); }
+    if (result.guards?.length)   { lines.push("GUARDS");   result.guards.forEach(t => lines.push(`  ${t.name}: ${t.qty.toLocaleString()}`)); }
+    const text = lines.join("\n");
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2500); });
+    } else {
+      const el = document.createElement("textarea");
+      el.value = text;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
+  };
+
+  const saveEmail = (val) => {
+    setEmail(val);
+    try { localStorage.setItem("blueprint_stack_email", val); } catch {}
+  };
+
+  const buildTextLines = () => {
+    if (!result) return [];
+    const lines = [];
+    if (result.mercs?.length)    { lines.push("MERCS");    result.mercs.forEach(t => lines.push(`  ${t.name}: ${t.qty.toLocaleString()}`)); lines.push(""); }
+    if (result.monsters?.length) { lines.push("MONSTERS"); result.monsters.forEach(t => lines.push(`  ${t.name}: ${t.qty.toLocaleString()}`)); lines.push(""); }
+    if (result.guards?.length)   { lines.push("GUARDS");   result.guards.forEach(t => lines.push(`  ${t.name}: ${t.qty.toLocaleString()}`)); }
+    return lines;
+  };
+
+  const downloadCSV = () => {
+    if (!result) return;
+    const rows = [["Group","Name","Quantity"]];
+    (result.mercs    || []).forEach(t => rows.push(["Mercs",    t.name, t.qty]));
+    (result.monsters || []).forEach(t => rows.push(["Monsters", t.name, t.qty]));
+    (result.guards   || []).forEach(t => rows.push(["Guards",   t.name, t.qty]));
+    const csv  = rows.map(r => r.join(",")).join("\n");
+    const blob = new Blob([csv], { type:"text/csv" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `stack_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const openEmail = () => {
+    if (!result) return;
+    const subject = encodeURIComponent(`Stack Calculator Results — ${new Date().toLocaleDateString()}`);
+    const body    = encodeURIComponent(buildTextLines().join("\n"));
+    const to      = encodeURIComponent(email.trim());
+    window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
+  };
+
+  const ladField = (key, label) => (
+    <div key={key} style={{ flex:1 }}>
+      <div style={{ fontSize:11, fontWeight:700, color:"#64748b", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:4 }}>{label}</div>
+      <input
+        type="number"
+        inputMode="numeric"
+        placeholder="0"
+        value={lad[key]}
+        onChange={e => setLad(l => ({ ...l, [key]: e.target.value }))}
+        style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #e2e8f0", borderRadius:10, fontSize:15, fontWeight:600, fontFamily:"'DM Mono',monospace", color:"#1e293b", backgroundColor:"#fff", textAlign:"right" }}
+      />
+    </div>
+  );
+
+  const totalTroops = result
+    ? (result.mercs?.length || 0) + (result.monsters?.length || 0) + (result.guards?.length || 0)
+    : 0;
+
+  const resultSection = (label, color, troops) => {
+    if (!troops?.length) return null;
+    return (
+      <div style={{ marginBottom:14 }}>
+        <div style={{ fontSize:11, fontWeight:700, color, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:6 }}>{label}</div>
+        <div style={{ backgroundColor:"#fff", borderRadius:12, border:"1.5px solid #e2e8f0", overflow:"hidden" }}>
+          {troops.map((t, i) => (
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", borderBottom: i < troops.length-1 ? "1px solid #f1f5f9" : "none" }}>
+              <span style={{ fontSize:13, fontWeight:600, color:"#1e293b" }}>{t.name}</span>
+              <span style={{ fontSize:14, fontWeight:700, color:"#1e293b", fontFamily:"'DM Mono',monospace" }}>{t.qty.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ padding:"16px 16px 32px" }}>
+
+      {/* STACK_URL not configured */}
+      {!stackEnabled() && (
+        <div style={{ backgroundColor:"#fef3c7", border:"1.5px solid #fbbf24", borderRadius:12, padding:"14px 16px", marginBottom:18 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:"#92400e", marginBottom:4 }}>Stack Calculator not configured</div>
+          <div style={{ fontSize:12, color:"#92400e", lineHeight:1.5 }}>
+            Deploy <strong>AppScript_StackCalc.js</strong> as a Web App, then paste the URL into <code style={{ backgroundColor:"#fde68a", borderRadius:4, padding:"1px 4px" }}>STACK_URL</code> in blueprint.html.
+          </div>
+        </div>
+      )}
+
+      {/* LAD inputs */}
+      <div style={{ marginBottom:18 }}>
+        <SecHeader title="Leadership / Authority / Dominance"/>
+        <div style={{ display:"flex", gap:10 }}>
+          {ladField("leadership", "Leadership")}
+          {ladField("authority",  "Authority")}
+          {ladField("dominance",  "Dominance")}
+        </div>
+      </div>
+
+      {/* Tier checkboxes */}
+      <div style={{ marginBottom:20 }}>
+        <SecHeader title="Troop Tiers"/>
+        <div style={{ backgroundColor:"#fff", borderRadius:12, border:"1.5px solid #e2e8f0", overflow:"hidden", padding:"12px 12px 8px" }}>
+          {/* Column headers */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6, marginBottom:8 }}>
+            {TIER_COLS.map(col => (
+              <div key={col.type} style={{ textAlign:"center", fontSize:11, fontWeight:700, color:"#64748b", textTransform:"uppercase", letterSpacing:"0.07em" }}>{col.label}</div>
+            ))}
+          </div>
+          {/* Grid: 4 rows × 4 cols */}
+          {TIER_LEVELS.map(lvl => (
+            <div key={lvl} style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6, marginBottom:6 }}>
+              {TIER_COLS.map(col => {
+                const key     = `${col.type}${lvl}`;
+                const checked = tiers[key] || false;
+                const bgMap   = { G:"#f0fdf4", S:"#eff6ff", E:"#fdf4ff", M:"#fef3c7" };
+                const txMap   = { G:"#15803d", S:"#1d4ed8", E:"#7e22ce", M:"#b45309" };
+                return (
+                  <button
+                    key={key}
+                    onClick={() => toggleTier(key)}
+                    style={{
+                      padding:"8px 0", borderRadius:8,
+                      border:            checked ? `2px solid ${txMap[col.type]}` : "2px solid #e2e8f0",
+                      backgroundColor:   checked ? bgMap[col.type] : "#f8fafc",
+                      color:             checked ? txMap[col.type] : "#94a3b8",
+                      fontSize:13, fontWeight:700,
+                      fontFamily:"'DM Mono',monospace",
+                      cursor:"pointer", transition:"all 0.12s",
+                      lineHeight:1, minHeight:36,
+                    }}
+                  >{key}</button>
+                );
+              })}
+            </div>
+          ))}
+
+          {/* Select all / Clear all */}
+          <div style={{ display:"flex", gap:8, marginTop:10 }}>
+            <button
+              onClick={() => setTiers(Object.fromEntries(Object.keys(DEFAULT_TIERS).map(k => [k, true])))}
+              style={{ flex:1, padding:"8px 0", borderRadius:8, border:"1.5px solid #e2e8f0", backgroundColor:"#f8fafc", fontSize:12, fontWeight:600, color:"#64748b", cursor:"pointer" }}
+            >Select all</button>
+            <button
+              onClick={() => setTiers({ ...DEFAULT_TIERS })}
+              style={{ flex:1, padding:"8px 0", borderRadius:8, border:"1.5px solid #e2e8f0", backgroundColor:"#f8fafc", fontSize:12, fontWeight:600, color:"#64748b", cursor:"pointer" }}
+            >Clear all</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Calculate button */}
+      <button
+        onClick={calculate}
+        disabled={loading || !stackEnabled()}
+        style={{
+          width:"100%", padding:"14px 0", borderRadius:12, border:"none",
+          backgroundColor: loading || !stackEnabled() ? "#94a3b8" : "#1e293b",
+          color:"#fff", fontSize:15, fontWeight:700,
+          cursor: loading || !stackEnabled() ? "default" : "pointer",
+          marginBottom:20, display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+        }}
+      >
+        {loading
+          ? <><div style={{ width:16, height:16, border:"2.5px solid #ffffff66", borderTopColor:"#fff", borderRadius:8, animation:"spin 0.7s linear infinite" }}/> Calculating…</>
+          : <><Icon name="calc" size={18} color="#fff"/> Calculate Stack</>
+        }
+      </button>
+
+      {/* Error */}
+      {error && (
+        <div style={{ backgroundColor:"#fef2f2", border:"1.5px solid #fca5a5", borderRadius:12, padding:"12px 16px", marginBottom:16, fontSize:13, color:"#dc2626", fontWeight:600 }}>
+          {error}
+        </div>
+      )}
+
+      {/* Results */}
+      {result && (
+        <div>
+          {/* Header row */}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+            <span style={{ fontSize:12, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.08em" }}>
+              {totalTroops} troop type{totalTroops !== 1 ? "s" : ""}
+            </span>
+            <button
+              onClick={copyToClipboard}
+              style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:8, border:"1.5px solid #e2e8f0", backgroundColor: copied ? "#f0fdf4" : "#fff", fontSize:12, fontWeight:700, color: copied ? "#16a34a" : "#1e293b", cursor:"pointer" }}
+            >
+              <Icon name="copy" size={14} color={copied ? "#16a34a" : "#1e293b"}/>
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+
+          {/* Export actions */}
+          <div style={{ backgroundColor:"#fff", borderRadius:12, border:"1.5px solid #e2e8f0", padding:"14px", marginBottom:16 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#64748b", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:10 }}>Export results</div>
+            <div style={{ marginBottom:10 }}>
+              <input
+                type="email"
+                inputMode="email"
+                placeholder="your@email.com"
+                value={email}
+                onChange={e => saveEmail(e.target.value)}
+                style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #e2e8f0", borderRadius:10, fontSize:14, color:"#1e293b", backgroundColor:"#f8fafc" }}
+              />
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button
+                onClick={downloadCSV}
+                style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"11px 0", borderRadius:10, border:"1.5px solid #e2e8f0", backgroundColor:"#f8fafc", fontSize:13, fontWeight:700, color:"#1e293b", cursor:"pointer" }}
+              >
+                <Icon name="download" size={16} color="#1e293b"/>
+                Download CSV
+              </button>
+              <button
+                onClick={openEmail}
+                disabled={!email.trim()}
+                style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"11px 0", borderRadius:10, border:"none", backgroundColor: email.trim() ? "#1e293b" : "#94a3b8", fontSize:13, fontWeight:700, color:"#fff", cursor: email.trim() ? "pointer" : "default" }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                Email results
+              </button>
+            </div>
+            {!email.trim() && (
+              <div style={{ fontSize:11, color:"#94a3b8", marginTop:6, textAlign:"center" }}>Enter an email address to enable the email button</div>
+            )}
+          </div>
+
+          {resultSection("Mercs",    "#7c3aed", result.mercs)}
+          {resultSection("Monsters", "#b45309", result.monsters)}
+          {resultSection("Guards",   "#0369a1", result.guards)}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── APP SHELL ────────────────────────────────────────────────────────────────
+const App = () => (
+  <div style={{ maxWidth:480, margin:"0 auto", minHeight:"100vh", display:"flex", flexDirection:"column", backgroundColor:"#f8fafc" }}>
+
+    {/* Header */}
+    <div style={{ padding:"16px 16px 12px", backgroundColor:"#fff", borderBottom:"1px solid #f1f5f9", position:"sticky", top:0, zIndex:50 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+        {/* Logo + wordmark */}
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <div style={{ width:32, height:32, borderRadius:8, backgroundColor:"#1e293b", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <Icon name="blueprint" size={16} color="#60a5fa"/>
+          </div>
+          <span style={{ fontSize:11, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.12em", fontFamily:"'DM Mono',monospace" }}>Blueprint</span>
+        </div>
+
+        {/* Sign in (placeholder — auth coming soon) */}
+        <button
+          onClick={() => alert("Sign-in coming soon.\nYour stacks will be saved to your account once this is set up.")}
+          style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 14px", borderRadius:8, border:"1.5px solid #e2e8f0", backgroundColor:"#f8fafc", fontSize:12, fontWeight:700, color:"#1e293b", cursor:"pointer" }}
+        >
+          <Icon name="user" size={13} color="#1e293b"/>
+          Sign in
+        </button>
+      </div>
+
+      {/* Page title */}
+      <h1 style={{ fontSize:22, fontWeight:800, color:"#1e293b", margin:0, letterSpacing:"-0.02em" }}>Stack Calculator</h1>
+      <p style={{ fontSize:12, color:"#94a3b8", margin:"2px 0 0", fontWeight:500 }}>Recommended troop stack</p>
+    </div>
+
+    {/* Main content */}
+    <div style={{ flex:1 }}>
+      <StackCalcScreen/>
+    </div>
+  </div>
+);
+
+ReactDOM.render(<App/>, document.getElementById("root"));
+</script>
+</body>
+</html>
