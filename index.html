@@ -1,4 +1,4 @@
-<!-- Blueprint Stack Calculator v7 — 2026-09-27 -->
+<!-- Blueprint Stack Calculator v8 — 2026-09-27 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -23,9 +23,9 @@
 <body>
 <div id="root"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js?v=7"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js?v=7"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js?v=7"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js?v=8"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js?v=8"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js?v=8"></script>
 
 <script type="text/babel">
 const { useState } = React;
@@ -327,7 +327,22 @@ const StackCalcScreen = () => {
         </div>
       </div>
 
-      {/* Calculate button */}
+      {error && <div style={{ backgroundColor:"#fef2f2", border:"1.5px solid #fca5a5", borderRadius:12, padding:"12px 16px", marginBottom:16, fontSize:13, color:"#dc2626", fontWeight:600 }}>{error}</div>}
+
+      {/* Troop selection */}
+      <div style={{ marginBottom:16 }}>
+        <SecHeader title="Troop Selection"/>
+        {/* Tier pairs side-by-side: G9/G8, S9/S8, E9/E8, M9/M8, M7, then Mercs */}
+        {TIER_PAIRS.map((pair, pi) => (
+          <div key={pi} style={{ display:"flex", gap:8, marginBottom:8 }}>
+            {pair.map(key => renderCollapsible({ sectionKey:key, label:key, troops:ROSTER[key]||[], isTier:true }))}
+          </div>
+        ))}
+        {/* Mercs below M7 */}
+        {renderCollapsible({ sectionKey:"MERCS", label:"Mercs", troops:ROSTER.MERCS, isTier:false })}
+      </div>
+
+      {/* Calculate button — below troop selection */}
       <button onClick={calculate} disabled={loading || !stackEnabled()}
         style={{ width:"100%", padding:"14px 0", borderRadius:12, border:"none", backgroundColor: loading || !stackEnabled() ? "#94a3b8" : "#1e293b", color:"#fff", fontSize:15, fontWeight:700, cursor: loading || !stackEnabled() ? "default" : "pointer", marginBottom:20, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}
       >
@@ -336,21 +351,6 @@ const StackCalcScreen = () => {
           : <><Icon name="calc" size={18} color="#fff"/> Calculate Stack</>
         }
       </button>
-
-      {error && <div style={{ backgroundColor:"#fef2f2", border:"1.5px solid #fca5a5", borderRadius:12, padding:"12px 16px", marginBottom:16, fontSize:13, color:"#dc2626", fontWeight:600 }}>{error}</div>}
-
-      {/* Troop selection */}
-      <div style={{ marginBottom:8 }}>
-        <SecHeader title="Troop Selection"/>
-        {/* Mercs */}
-        {renderCollapsible({ sectionKey:"MERCS", label:"Mercs", troops:ROSTER.MERCS, isTier:false })}
-        {/* Tier pairs side-by-side */}
-        {TIER_PAIRS.map((pair, pi) => (
-          <div key={pi} style={{ display:"flex", gap:8, marginTop:8 }}>
-            {pair.map(key => renderCollapsible({ sectionKey:key, label:key, troops:ROSTER[key]||[], isTier:true }))}
-          </div>
-        ))}
-      </div>
 
       {/* Flat results */}
       {calculated && renderResults()}
