@@ -1,4 +1,4 @@
-<!-- Blueprint Stack Calculator v10 — 2026-09-27 -->
+<!-- Blueprint Stack Calculator v11 — 2026-09-27 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -23,9 +23,9 @@
 <body>
 <div id="root"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js?v=10"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js?v=10"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js?v=10"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js?v=11"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js?v=11"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js?v=11"></script>
 
 <script type="text/babel">
 const { useState } = React;
@@ -104,7 +104,8 @@ const StackCalcScreen = () => {
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState(null);
   const [copied,   setCopied]   = useState(false);
-  const [troopQty, setTroopQty] = useState({});
+  const [troopQty,    setTroopQty]    = useState({});
+  const [resultOrder, setResultOrder] = useState({ mercs:[], guards:[], monsters:[] });
 
   const [tierOn,   setTierOn]   = useState(() => Object.fromEntries(TIER_ORDER.map(k => [k, true])));
   const [troopOn,  setTroopOn]  = useState(() => Object.fromEntries([...Object.values(ROSTER).flat()].map(n => [n, true])));
@@ -156,11 +157,13 @@ const StackCalcScreen = () => {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
+      const mercs    = data.stack?.mercs    || [];
+      const guards   = data.stack?.guards   || [];
+      const monsters = data.stack?.monsters || [];
       const qty = {};
-      (data.stack?.mercs    || []).forEach(t => { qty[t.name] = t.qty; });
-      (data.stack?.guards   || []).forEach(t => { qty[t.name] = t.qty; });
-      (data.stack?.monsters || []).forEach(t => { qty[t.name] = t.qty; });
+      [...mercs, ...guards, ...monsters].forEach(t => { qty[t.name] = t.qty; });
       setTroopQty(qty);
+      setResultOrder({ mercs, guards, monsters });
       requestAnimationFrame(() => window.scrollTo({ top:0, behavior:"smooth" }));
     } catch (err) {
       setError(err.message || "Could not reach the calculator.");
@@ -309,10 +312,39 @@ const StackCalcScreen = () => {
           {!email.trim() && <div style={{ fontSize:11, color:"#94a3b8", marginTop:6, textAlign:"center" }}>Enter an email to enable email button</div>}
         </div>
 
-        {resultSection("Mercs", "#64748b", "#e2e8f0", ROSTER.MERCS, n => troopQty[n], n => troopOn[n])}
-        {TIER_ORDER.map(key =>
-          resultSection(key, "#64748b", "#e2e8f0", ROSTER[key]||[], n => troopQty[n], n => tierOn[key] && troopOn[n])
-        )}
+        {(() => {
+          // Flat results: Mercs → Monsters → Guards in sheet order
+          const ROSTER_SET = new Set([...Object.values(ROSTER).flat()]);
+          const flatSection = (label, items) => {
+            if (!items.length) return null;
+            return (
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:"#64748b", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:6 }}>{label}</div>
+                <div style={{ backgroundColor:"#fff", borderRadius:12, border:"1.5px solid #e2e8f0", overflow:"hidden" }}>
+                  {items.map((t, i) => {
+                    const q = t.qty || 0;
+                    return (
+                      <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", borderBottom: i<items.length-1 ? "1px solid #f1f5f9" : "none", opacity: q > 0 ? 1 : 0.35 }}>
+                        <span style={{ fontSize:13, fontWeight:600, color:"#1e293b" }}>{t.name}</span>
+                        <span style={{ fontSize:14, fontWeight:700, color: q > 0 ? "#1e293b" : "#94a3b8", fontFamily:"'DM Mono',monospace" }}>{q.toLocaleString()}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          };
+          // Mercs: ROSTER order, 0 if toggled off
+          const mercItems = ROSTER.MERCS.map(n => ({ name:n, qty: troopOn[n] !== false ? (troopQty[n]||0) : 0 }));
+          // Guards/Monsters: API (sheet) order, filtered to known ROSTER troops
+          const monsterItems = resultOrder.monsters.filter(t => ROSTER_SET.has(t.name));
+          const guardItems   = resultOrder.guards.filter(t => ROSTER_SET.has(t.name));
+          return (<>
+            {flatSection("Mercs", mercItems)}
+            {flatSection("Monsters", monsterItems)}
+            {flatSection("Guards", guardItems)}
+          </>);
+        })()}
       </div>
     );
   };
