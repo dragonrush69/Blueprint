@@ -1,4 +1,4 @@
-<!-- Blueprint Stack Calculator v8 — 2026-09-27 -->
+<!-- Blueprint Stack Calculator v9 — 2026-09-27 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -23,9 +23,9 @@
 <body>
 <div id="root"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js?v=8"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js?v=8"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js?v=8"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js?v=9"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js?v=9"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js?v=9"></script>
 
 <script type="text/babel">
 const { useState } = React;
@@ -135,12 +135,22 @@ const StackCalcScreen = () => {
     setLoading(true);
     setError(null);
     try {
+      // Build includes: troop name → true/false based on tier + individual toggles
+      const includes = {};
+      ROSTER.MERCS.forEach(name => { includes[name] = troopOn[name] !== false; });
+      TIER_ORDER.forEach(tier => {
+        (ROSTER[tier] || []).forEach(name => {
+          includes[name] = (tierOn[tier] !== false) && (troopOn[name] !== false);
+        });
+      });
+
       const res = await fetch(STACK_URL, {
         method:"POST", headers:{"Content-Type":"text/plain"},
         body: JSON.stringify({
           leadership: Number(lad.leadership) || 0,
           authority:  Number(lad.authority)  || 0,
           dominance:  Number(lad.dominance)  || 0,
+          includes,
         }),
         redirect:"follow",
       });
