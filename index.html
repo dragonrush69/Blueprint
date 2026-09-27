@@ -5,9 +5,6 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
-  <meta http-equiv="Pragma" content="no-cache"/>
-  <meta http-equiv="Expires" content="0"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
   <title>Blueprint — Stack Calculator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -25,9 +22,9 @@
 <body>
 <div id="root"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js?v=3"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js?v=3"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js?v=3"></script>
 
 <script type="text/babel">
 const { useState, useEffect } = React;
@@ -35,26 +32,35 @@ const { useState, useEffect } = React;
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const STACK_URL = "https://script.google.com/macros/s/AKfycbzuFNRBcBWmGjqDBP_WBoMuOHPZN3qkkKH67_DhCtYR7zSlj-fmhHSJkAoMH6hG6X39/exec";
 
-// Blueprint Supabase — ready for auth / save stacks
-const SUPABASE_URL  = "https://hzafcayebsrlxvtuxzyu.supabase.co";
-const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6YWZjYXllYnNybHh2dHV4enl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MDcwMTMsImV4cCI6MjEwNjA4MzAxM30.5su9jJMgZSEYNUQnlwtzMYgMU40dTbnOphTkKBccJLc";
-
 const stackEnabled = () => STACK_URL && !STACK_URL.startsWith("YOUR_");
 
-const scrollToTop = () => requestAnimationFrame(() => {
-  window.scrollTo({ top: 0, behavior: "smooth" });
-});
+// ─── TIER DEFINITIONS ─────────────────────────────────────────────────────────
+// E = Cannon (type C in sheet, mapped to E here)
+const TIER_DEFS = [
+  { key:"G9", color:"#166534", bg:"#f0fdf4", border:"#16a34a" },
+  { key:"G8", color:"#166534", bg:"#f0fdf4", border:"#16a34a" },
+  { key:"S9", color:"#1e40af", bg:"#eff6ff", border:"#3b82f6" },
+  { key:"S8", color:"#1e40af", bg:"#eff6ff", border:"#3b82f6" },
+  { key:"E9", color:"#6b21a8", bg:"#faf5ff", border:"#a855f7" },
+  { key:"E8", color:"#6b21a8", bg:"#faf5ff", border:"#a855f7" },
+  { key:"M9", color:"#92400e", bg:"#fffbeb", border:"#d97706" },
+  { key:"M8", color:"#92400e", bg:"#fffbeb", border:"#d97706" },
+  { key:"M7", color:"#92400e", bg:"#fffbeb", border:"#d97706" },
+];
+const TIER_MAP = Object.fromEntries(TIER_DEFS.map(d => [d.key, d]));
+
+// Cannon type "C" in sheet → "E" in UI
+const normalizeTier = (tier) => (tier || "").replace(/^C/, "E");
 
 // ─── ICONS ────────────────────────────────────────────────────────────────────
 const Icon = ({ name, size=22, color="currentColor" }) => {
   const s = { width:size, height:size, viewBox:"0 0 24 24", fill:"none", stroke:color, strokeWidth:"2", strokeLinecap:"round", strokeLinejoin:"round" };
   const icons = {
-    calc:     <svg {...s}><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/></svg>,
-    copy:     <svg {...s}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>,
-    download: <svg {...s}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
-    warning:  <svg {...s}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
-    user:     <svg {...s}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
-    blueprint:<svg {...s}><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="21"/></svg>,
+    calc:      <svg {...s}><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/></svg>,
+    copy:      <svg {...s}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>,
+    download:  <svg {...s}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
+    user:      <svg {...s}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+    blueprint: <svg {...s}><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="21"/></svg>,
   };
   return icons[name] || null;
 };
@@ -66,34 +72,88 @@ const SecHeader = ({ title, action }) => (
   </div>
 );
 
-// ─── STACK CALCULATOR ─────────────────────────────────────────────────────────
-const TIER_COLS = [
-  { type:"G", label:"Guard"   },
-  { type:"S", label:"Spec"    },
-  { type:"E", label:"Cannon"  },
-  { type:"M", label:"Monster" },
-];
-const TIER_LEVELS = [9, 8, 7, 6];
-const DEFAULT_TIERS = {
-  E9:false, G9:false, S9:false, M9:false,
-  E8:false, G8:false, S8:false, M8:false,
-  E7:false, G7:false, S7:false, M7:false,
-  E6:false, G6:false, S6:false, M6:false,
-};
+// ─── TOGGLE SWITCH ────────────────────────────────────────────────────────────
+const ToggleSwitch = ({ on, onColor="#3b82f6", onClick, size=36 }) => (
+  <button
+    onClick={onClick}
+    style={{
+      width:size, height:Math.round(size*0.56), borderRadius:Math.round(size*0.28),
+      border:"none", cursor:"pointer", flexShrink:0,
+      backgroundColor: on ? onColor : "#cbd5e1",
+      position:"relative", padding:0, transition:"background 0.15s",
+    }}
+  >
+    <div style={{
+      width:Math.round(size*0.39), height:Math.round(size*0.39),
+      borderRadius:"50%", backgroundColor:"#fff",
+      position:"absolute",
+      top:Math.round(size*0.084),
+      left: on ? Math.round(size*0.53) : Math.round(size*0.084),
+      transition:"left 0.15s",
+      boxShadow:"0 1px 2px rgba(0,0,0,0.2)",
+    }}/>
+  </button>
+);
 
+// ─── TROOP CHECKBOX ───────────────────────────────────────────────────────────
+const TroopCheck = ({ on, accentColor="#3b82f6", onClick }) => (
+  <button
+    onClick={onClick}
+    style={{
+      width:20, height:20, borderRadius:5, flexShrink:0, cursor:"pointer",
+      border:`2px solid ${on ? accentColor : "#cbd5e1"}`,
+      backgroundColor: on ? accentColor + "22" : "#f8fafc",
+      display:"flex", alignItems:"center", justifyContent:"center",
+    }}
+  >
+    {on && (
+      <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+        <polyline points="2,6 5,9 10,3" stroke={accentColor} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    )}
+  </button>
+);
+
+// ─── STACK CALCULATOR ─────────────────────────────────────────────────────────
 const StackCalcScreen = () => {
   const [lad,     setLad]     = useState({ leadership:"", authority:"", dominance:"" });
-  const [tiers,   setTiers]   = useState({ ...DEFAULT_TIERS });
   const [loading, setLoading] = useState(false);
-  const [result,  setResult]  = useState(null);
+  const [result,  setResult]  = useState(null);   // { mercs, guards, monsters } normalised
   const [error,   setError]   = useState(null);
   const [copied,  setCopied]  = useState(false);
-  const [email,   setEmail]   = useState(() => {
+
+  // Post-calculate toggle state
+  const [tierOn,   setTierOn]   = useState({});   // { G9:true, S8:false, … }
+  const [troopOn,  setTroopOn]  = useState({});   // { "Corax II":true, … }
+  const [expanded, setExpanded] = useState({});   // { G9:false, … } — collapsed by default
+
+  const [email, setEmail] = useState(() => {
     try { return localStorage.getItem("blueprint_stack_email") || ""; } catch { return ""; }
   });
 
-  const toggleTier = (key) => setTiers(t => ({ ...t, [key]: !t[key] }));
+  // Normalise & store result — converts C→E for cannon tiers
+  const applyResult = (stack) => {
+    const guards   = (stack.guards   || []).map(t => ({ ...t, tier: normalizeTier(t.tier) }));
+    const monsters = (stack.monsters || []).map(t => ({ ...t, tier: normalizeTier(t.tier) }));
+    const mercs    = stack.mercs || [];
+    setResult({ guards, monsters, mercs });
+  };
 
+  // Init toggles whenever a new result arrives
+  useEffect(() => {
+    if (!result) return;
+    const tOn = {};
+    const trOn = {};
+    const exp = {};
+    TIER_DEFS.forEach(d => { tOn[d.key] = true; exp[d.key] = false; });
+    [...result.guards, ...result.monsters, ...result.mercs].forEach(t => { trOn[t.name] = true; });
+    setTierOn(tOn);
+    setTroopOn(trOn);
+    setExpanded(exp);
+    requestAnimationFrame(() => window.scrollTo({ top:0, behavior:"smooth" }));
+  }, [result]);
+
+  // ── API call ──
   const calculate = async () => {
     if (!stackEnabled()) return;
     setLoading(true);
@@ -101,19 +161,18 @@ const StackCalcScreen = () => {
     setResult(null);
     try {
       const res = await fetch(STACK_URL, {
-        method:   "POST",
-        headers:  { "Content-Type": "text/plain" },
-        body:     JSON.stringify({
+        method:  "POST",
+        headers: { "Content-Type":"text/plain" },
+        body:    JSON.stringify({
           leadership: Number(lad.leadership) || 0,
           authority:  Number(lad.authority)  || 0,
           dominance:  Number(lad.dominance)  || 0,
-          tiers,
         }),
         redirect: "follow",
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setResult(data.stack);
+      applyResult(data.stack);
     } catch (err) {
       setError(err.message || "Could not reach the calculator. Check the URL and try again.");
     } finally {
@@ -121,114 +180,183 @@ const StackCalcScreen = () => {
     }
   };
 
-  useEffect(() => { if (result) scrollToTop(); }, [result]);
+  // ── Tier toggle: flip tier + sync all its troop toggles ──
+  const toggleTier = (key) => {
+    const newVal = !tierOn[key];
+    setTierOn(t => ({ ...t, [key]: newVal }));
+    const affected = [...(result?.guards||[]), ...(result?.monsters||[])]
+      .filter(t => t.tier === key).map(t => t.name);
+    setTroopOn(tr => {
+      const next = { ...tr };
+      affected.forEach(n => { next[n] = newVal; });
+      return next;
+    });
+  };
 
+  const toggleTroop  = (name) => setTroopOn(tr => ({ ...tr, [name]: !tr[name] }));
+  const toggleExpand = (key)  => setExpanded(e  => ({ ...e,  [key]: !e[key]  }));
+
+  // ── Helpers ──
+  const guardsByTier   = (k) => (result?.guards   || []).filter(t => t.tier === k);
+  const monstersByTier = (k) => (result?.monsters || []).filter(t => t.tier === k);
+
+  const effectiveMercs    = () => (result?.mercs    || []).filter(t => troopOn[t.name]  !== false);
+  const effectiveGuards   = () => (result?.guards   || []).filter(t => tierOn[t.tier] !== false && troopOn[t.name] !== false);
+  const effectiveMonsters = () => (result?.monsters || []).filter(t => tierOn[t.tier] !== false && troopOn[t.name] !== false);
+  const totalActive = () => effectiveMercs().length + effectiveGuards().length + effectiveMonsters().length;
+
+  // ── Copy ──
   const copyToClipboard = () => {
-    if (!result) return;
     const lines = [];
-    if (result.mercs?.length)    { lines.push("MERCS");    result.mercs.forEach(t => lines.push(`  ${t.name}: ${t.qty.toLocaleString()}`)); }
-    if (result.monsters?.length) { lines.push("MONSTERS"); result.monsters.forEach(t => lines.push(`  ${t.name}: ${t.qty.toLocaleString()}`)); }
-    if (result.guards?.length)   { lines.push("GUARDS");   result.guards.forEach(t => lines.push(`  ${t.name}: ${t.qty.toLocaleString()}`)); }
+    const em = effectiveMercs(), eg = effectiveGuards(), emon = effectiveMonsters();
+    if (em.length)   { lines.push("MERCS");    em.forEach(t => lines.push(`  ${t.name}: ${t.qty.toLocaleString()}`)   ); }
+    if (eg.length)   { lines.push("GUARDS");   eg.forEach(t => lines.push(`  [${t.tier}] ${t.name}: ${t.qty.toLocaleString()}`) ); }
+    if (emon.length) { lines.push("MONSTERS"); emon.forEach(t => lines.push(`  [${t.tier}] ${t.name}: ${t.qty.toLocaleString()}`)); }
     const text = lines.join("\n");
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2500); });
-    } else {
+    const done = () => { setCopied(true); setTimeout(() => setCopied(false), 2500); };
+    if (navigator.clipboard?.writeText) { navigator.clipboard.writeText(text).then(done); }
+    else {
       const el = document.createElement("textarea");
-      el.value = text;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand("copy");
-      document.body.removeChild(el);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+      el.value = text; document.body.appendChild(el); el.select(); document.execCommand("copy"); document.body.removeChild(el);
+      done();
     }
   };
 
-  const saveEmail = (val) => {
-    setEmail(val);
-    try { localStorage.setItem("blueprint_stack_email", val); } catch {}
-  };
-
-  const buildTextLines = () => {
-    if (!result) return [];
-    const lines = [];
-    if (result.mercs?.length)    { lines.push("MERCS");    result.mercs.forEach(t => lines.push(`  ${t.name}: ${t.qty.toLocaleString()}`)); lines.push(""); }
-    if (result.monsters?.length) { lines.push("MONSTERS"); result.monsters.forEach(t => lines.push(`  ${t.name}: ${t.qty.toLocaleString()}`)); lines.push(""); }
-    if (result.guards?.length)   { lines.push("GUARDS");   result.guards.forEach(t => lines.push(`  ${t.name}: ${t.qty.toLocaleString()}`)); }
-    return lines;
-  };
-
+  // ── Download CSV ──
   const downloadCSV = () => {
     if (!result) return;
-    const rows = [["Group","Name","Quantity"]];
-    (result.mercs    || []).forEach(t => rows.push(["Mercs",    t.name, t.qty]));
-    (result.monsters || []).forEach(t => rows.push(["Monsters", t.name, t.qty]));
-    (result.guards   || []).forEach(t => rows.push(["Guards",   t.name, t.qty]));
+    const rows = [["Group","Tier","Name","Quantity"]];
+    effectiveMercs().forEach(t    => rows.push(["Mercs",    "",      t.name, t.qty]));
+    effectiveGuards().forEach(t   => rows.push(["Guards",   t.tier,  t.name, t.qty]));
+    effectiveMonsters().forEach(t => rows.push(["Monsters", t.tier,  t.name, t.qty]));
     const csv  = rows.map(r => r.join(",")).join("\n");
     const blob = new Blob([csv], { type:"text/csv" });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
-    a.href     = url;
-    a.download = `stack_${new Date().toISOString().slice(0,10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    a.href = url; a.download = `stack_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
+  // ── Email ──
+  const saveEmail = (v) => { setEmail(v); try { localStorage.setItem("blueprint_stack_email", v); } catch {} };
   const openEmail = () => {
     if (!result) return;
+    const lines = [];
+    effectiveMercs().forEach(t    => lines.push(`${t.name}: ${t.qty.toLocaleString()}`));
+    effectiveGuards().forEach(t   => lines.push(`[${t.tier}] ${t.name}: ${t.qty.toLocaleString()}`));
+    effectiveMonsters().forEach(t => lines.push(`[${t.tier}] ${t.name}: ${t.qty.toLocaleString()}`));
     const subject = encodeURIComponent(`Stack Calculator Results — ${new Date().toLocaleDateString()}`);
-    const body    = encodeURIComponent(buildTextLines().join("\n"));
-    const to      = encodeURIComponent(email.trim());
-    window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
+    const body    = encodeURIComponent(lines.join("\n"));
+    window.location.href = `mailto:${encodeURIComponent(email.trim())}?subject=${subject}&body=${body}`;
   };
 
+  // ── LAD field ──
   const ladField = (key, label) => (
     <div key={key} style={{ flex:1 }}>
       <div style={{ fontSize:11, fontWeight:700, color:"#64748b", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:4 }}>{label}</div>
       <input
-        type="number"
-        inputMode="numeric"
-        placeholder="0"
-        value={lad[key]}
+        type="number" inputMode="numeric" placeholder="0" value={lad[key]}
         onChange={e => setLad(l => ({ ...l, [key]: e.target.value }))}
         style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #e2e8f0", borderRadius:10, fontSize:15, fontWeight:600, fontFamily:"'DM Mono',monospace", color:"#1e293b", backgroundColor:"#fff", textAlign:"right" }}
       />
     </div>
   );
 
-  const totalTroops = result
-    ? (result.mercs?.length || 0) + (result.monsters?.length || 0) + (result.guards?.length || 0)
-    : 0;
+  // ── Tier section renderer ──
+  const renderTierSection = (tierKey, troops) => {
+    if (!troops.length) return null;
+    const def   = TIER_MAP[tierKey];
+    const isOn  = tierOn[tierKey] !== false;
+    const isExp = expanded[tierKey];
+    return (
+      <div key={tierKey} style={{ marginBottom:8 }}>
+        {/* Header */}
+        <div
+          onClick={() => toggleExpand(tierKey)}
+          style={{
+            display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
+            backgroundColor: isOn ? def.bg : "#f8fafc",
+            borderRadius: isExp ? "10px 10px 0 0" : 10,
+            border:`1.5px solid ${isOn ? def.border : "#e2e8f0"}`,
+            cursor:"pointer", userSelect:"none", transition:"background 0.15s",
+          }}
+        >
+          <ToggleSwitch
+            on={isOn} onColor={def.border} size={36}
+            onClick={e => { e.stopPropagation(); toggleTier(tierKey); }}
+          />
+          <span style={{ fontSize:14, fontWeight:800, color: isOn ? def.color : "#94a3b8", fontFamily:"'DM Mono',monospace", minWidth:28 }}>{tierKey}</span>
+          <span style={{ flex:1, fontSize:12, color:"#94a3b8" }}>{troops.length} troop{troops.length !== 1 ? "s" : ""}</span>
+          <span style={{ color:"#94a3b8", fontSize:11, display:"inline-block", transform: isExp ? "rotate(180deg)" : "none", transition:"transform 0.15s" }}>▾</span>
+        </div>
 
-  const resultSection = (label, color, troops) => {
-    if (!troops?.length) return null;
+        {/* Expanded troop list */}
+        {isExp && (
+          <div style={{ border:`1.5px solid ${isOn ? def.border : "#e2e8f0"}`, borderTop:"none", borderRadius:"0 0 10px 10px", overflow:"hidden", backgroundColor:"#fff" }}>
+            {troops.map((t, i) => {
+              const tOn = troopOn[t.name] !== false;
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
+                    borderBottom: i < troops.length - 1 ? "1px solid #f1f5f9" : "none",
+                    opacity: isOn && tOn ? 1 : 0.38, transition:"opacity 0.15s",
+                  }}
+                >
+                  <TroopCheck on={tOn && isOn} accentColor={def.border} onClick={() => toggleTroop(t.name)} />
+                  <span style={{ flex:1, fontSize:13, fontWeight:600, color:"#1e293b" }}>{t.name}</span>
+                  <span style={{ fontSize:14, fontWeight:700, color:"#1e293b", fontFamily:"'DM Mono',monospace" }}>{t.qty.toLocaleString()}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ── Mercs section (flat, no tier) ──
+  const renderMercs = () => {
+    const mercs = result?.mercs || [];
+    if (!mercs.length) return null;
     return (
       <div style={{ marginBottom:14 }}>
-        <div style={{ fontSize:11, fontWeight:700, color, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:6 }}>{label}</div>
+        <div style={{ fontSize:11, fontWeight:700, color:"#7c3aed", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:6 }}>Mercs</div>
         <div style={{ backgroundColor:"#fff", borderRadius:12, border:"1.5px solid #e2e8f0", overflow:"hidden" }}>
-          {troops.map((t, i) => (
-            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", borderBottom: i < troops.length-1 ? "1px solid #f1f5f9" : "none" }}>
-              <span style={{ fontSize:13, fontWeight:600, color:"#1e293b" }}>{t.name}</span>
-              <span style={{ fontSize:14, fontWeight:700, color:"#1e293b", fontFamily:"'DM Mono',monospace" }}>{t.qty.toLocaleString()}</span>
-            </div>
-          ))}
+          {mercs.map((t, i) => {
+            const tOn = troopOn[t.name] !== false;
+            return (
+              <div
+                key={i}
+                style={{
+                  display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
+                  borderBottom: i < mercs.length - 1 ? "1px solid #f1f5f9" : "none",
+                  opacity: tOn ? 1 : 0.38, transition:"opacity 0.15s",
+                }}
+              >
+                <TroopCheck on={tOn} accentColor="#8b5cf6" onClick={() => toggleTroop(t.name)} />
+                <span style={{ flex:1, fontSize:13, fontWeight:600, color:"#1e293b" }}>{t.name}</span>
+                <span style={{ fontSize:14, fontWeight:700, color:"#1e293b", fontFamily:"'DM Mono',monospace" }}>{t.qty.toLocaleString()}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
   };
 
+  const activeCount = result ? totalActive() : 0;
+
   return (
     <div style={{ padding:"16px 16px 32px" }}>
 
-      {/* STACK_URL not configured */}
+      {/* Stack URL not configured */}
       {!stackEnabled() && (
         <div style={{ backgroundColor:"#fef3c7", border:"1.5px solid #fbbf24", borderRadius:12, padding:"14px 16px", marginBottom:18 }}>
           <div style={{ fontSize:13, fontWeight:700, color:"#92400e", marginBottom:4 }}>Stack Calculator not configured</div>
-          <div style={{ fontSize:12, color:"#92400e", lineHeight:1.5 }}>
-            Deploy <strong>AppScript_StackCalc.js</strong> as a Web App, then paste the URL into <code style={{ backgroundColor:"#fde68a", borderRadius:4, padding:"1px 4px" }}>STACK_URL</code> in blueprint.html.
-          </div>
+          <div style={{ fontSize:12, color:"#92400e", lineHeight:1.5 }}>Deploy AppScript_StackCalc.gs as a Web App, then paste the /exec URL into STACK_URL in index.html.</div>
         </div>
       )}
 
@@ -236,61 +364,9 @@ const StackCalcScreen = () => {
       <div style={{ marginBottom:18 }}>
         <SecHeader title="Leadership / Authority / Dominance"/>
         <div style={{ display:"flex", gap:10 }}>
-          {ladField("leadership", "Leadership")}
-          {ladField("authority",  "Authority")}
-          {ladField("dominance",  "Dominance")}
-        </div>
-      </div>
-
-      {/* Tier checkboxes */}
-      <div style={{ marginBottom:20 }}>
-        <SecHeader title="Troop Tiers"/>
-        <div style={{ backgroundColor:"#fff", borderRadius:12, border:"1.5px solid #e2e8f0", overflow:"hidden", padding:"12px 12px 8px" }}>
-          {/* Column headers */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6, marginBottom:8 }}>
-            {TIER_COLS.map(col => (
-              <div key={col.type} style={{ textAlign:"center", fontSize:11, fontWeight:700, color:"#64748b", textTransform:"uppercase", letterSpacing:"0.07em" }}>{col.label}</div>
-            ))}
-          </div>
-          {/* Grid: 4 rows × 4 cols */}
-          {TIER_LEVELS.map(lvl => (
-            <div key={lvl} style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:6, marginBottom:6 }}>
-              {TIER_COLS.map(col => {
-                const key     = `${col.type}${lvl}`;
-                const checked = tiers[key] || false;
-                const bgMap   = { G:"#f0fdf4", S:"#eff6ff", E:"#fdf4ff", M:"#fef3c7" };
-                const txMap   = { G:"#15803d", S:"#1d4ed8", E:"#7e22ce", M:"#b45309" };
-                return (
-                  <button
-                    key={key}
-                    onClick={() => toggleTier(key)}
-                    style={{
-                      padding:"8px 0", borderRadius:8,
-                      border:            checked ? `2px solid ${txMap[col.type]}` : "2px solid #e2e8f0",
-                      backgroundColor:   checked ? bgMap[col.type] : "#f8fafc",
-                      color:             checked ? txMap[col.type] : "#94a3b8",
-                      fontSize:13, fontWeight:700,
-                      fontFamily:"'DM Mono',monospace",
-                      cursor:"pointer", transition:"all 0.12s",
-                      lineHeight:1, minHeight:36,
-                    }}
-                  >{key}</button>
-                );
-              })}
-            </div>
-          ))}
-
-          {/* Select all / Clear all */}
-          <div style={{ display:"flex", gap:8, marginTop:10 }}>
-            <button
-              onClick={() => setTiers(Object.fromEntries(Object.keys(DEFAULT_TIERS).map(k => [k, true])))}
-              style={{ flex:1, padding:"8px 0", borderRadius:8, border:"1.5px solid #e2e8f0", backgroundColor:"#f8fafc", fontSize:12, fontWeight:600, color:"#64748b", cursor:"pointer" }}
-            >Select all</button>
-            <button
-              onClick={() => setTiers({ ...DEFAULT_TIERS })}
-              style={{ flex:1, padding:"8px 0", borderRadius:8, border:"1.5px solid #e2e8f0", backgroundColor:"#f8fafc", fontSize:12, fontWeight:600, color:"#64748b", cursor:"pointer" }}
-            >Clear all</button>
-          </div>
+          {ladField("leadership","Leadership")}
+          {ladField("authority","Authority")}
+          {ladField("dominance","Dominance")}
         </div>
       </div>
 
@@ -325,7 +401,7 @@ const StackCalcScreen = () => {
           {/* Header row */}
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
             <span style={{ fontSize:12, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.08em" }}>
-              {totalTroops} troop type{totalTroops !== 1 ? "s" : ""}
+              {activeCount} active troop type{activeCount !== 1 ? "s" : ""}
             </span>
             <button
               onClick={copyToClipboard}
@@ -341,10 +417,7 @@ const StackCalcScreen = () => {
             <div style={{ fontSize:11, fontWeight:700, color:"#64748b", textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:10 }}>Export results</div>
             <div style={{ marginBottom:10 }}>
               <input
-                type="email"
-                inputMode="email"
-                placeholder="your@email.com"
-                value={email}
+                type="email" inputMode="email" placeholder="your@email.com" value={email}
                 onChange={e => saveEmail(e.target.value)}
                 style={{ width:"100%", padding:"10px 12px", border:"1.5px solid #e2e8f0", borderRadius:10, fontSize:14, color:"#1e293b", backgroundColor:"#f8fafc" }}
               />
@@ -371,9 +444,14 @@ const StackCalcScreen = () => {
             )}
           </div>
 
-          {resultSection("Mercs",    "#7c3aed", result.mercs)}
-          {resultSection("Monsters", "#b45309", result.monsters)}
-          {resultSection("Guards",   "#0369a1", result.guards)}
+          {/* Mercs — flat list, preserved order */}
+          {renderMercs()}
+
+          {/* Guards & Monsters — collapsible tier sections in order */}
+          {TIER_DEFS.map(({ key }) => {
+            const troops = key.startsWith("M") ? monstersByTier(key) : guardsByTier(key);
+            return renderTierSection(key, troops);
+          })}
         </div>
       )}
     </div>
@@ -387,15 +465,12 @@ const App = () => (
     {/* Header */}
     <div style={{ padding:"16px 16px 12px", backgroundColor:"#fff", borderBottom:"1px solid #f1f5f9", position:"sticky", top:0, zIndex:50 }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-        {/* Logo + wordmark */}
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <div style={{ width:32, height:32, borderRadius:8, backgroundColor:"#1e293b", display:"flex", alignItems:"center", justifyContent:"center" }}>
             <Icon name="blueprint" size={16} color="#60a5fa"/>
           </div>
           <span style={{ fontSize:11, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.12em", fontFamily:"'DM Mono',monospace" }}>Blueprint</span>
         </div>
-
-        {/* Sign in (placeholder — auth coming soon) */}
         <button
           onClick={() => alert("Sign-in coming soon.\nYour stacks will be saved to your account once this is set up.")}
           style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 14px", borderRadius:8, border:"1.5px solid #e2e8f0", backgroundColor:"#f8fafc", fontSize:12, fontWeight:700, color:"#1e293b", cursor:"pointer" }}
@@ -405,9 +480,10 @@ const App = () => (
         </button>
       </div>
 
-      {/* Page title */}
-      <h1 style={{ fontSize:22, fontWeight:800, color:"#1e293b", margin:0, letterSpacing:"-0.02em" }}>Stack Calculator</h1>
-      <p style={{ fontSize:12, color:"#94a3b8", margin:"2px 0 0", fontWeight:500 }}>Recommended troop stack</p>
+      {/* Tab bar (single tab for now) */}
+      <div style={{ display:"flex", gap:4 }}>
+        <div style={{ padding:"6px 14px", borderRadius:8, backgroundColor:"#1e293b", fontSize:12, fontWeight:700, color:"#fff" }}>Stack Calculator</div>
+      </div>
     </div>
 
     {/* Main content */}
@@ -417,7 +493,8 @@ const App = () => (
   </div>
 );
 
-ReactDOM.render(<App/>, document.getElementById("root"));
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App/>);
 </script>
 </body>
 </html>
